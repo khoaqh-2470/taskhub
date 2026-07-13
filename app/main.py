@@ -1,0 +1,24 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from app.api.v1 import projects
+from app.core.config import settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    print(f"{settings.app_name} is starting")
+    yield
+    print(f"{settings.app_name} is shutting down")
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+app.include_router(projects.router, prefix="/api/v1")
+
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to TaskHub API"}
