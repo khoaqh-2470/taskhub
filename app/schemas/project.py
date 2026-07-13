@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -21,3 +23,4 @@ class ProjectResponse(ProjectBase):
 
     id: int
     owner_id: int
+    created_at: datetime
