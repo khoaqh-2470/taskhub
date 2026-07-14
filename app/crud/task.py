@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models.task import Task
-from app.schemas.task import TaskCreate, TaskUpdate
+from app.schemas.task import TaskCreate, TaskCreateInProject, TaskUpdate
 
 
 def get_task(db: Session, task_id: int) -> Task | None:
@@ -14,6 +14,14 @@ def get_tasks(db: Session, skip: int = 0, limit: int = 100) -> list[Task]:
 
 def create_task(db: Session, task: TaskCreate) -> Task:
     db_task = Task(**task.model_dump())
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+    return db_task
+
+
+def create_task_in_project(db: Session, project_id: int, task: TaskCreateInProject) -> Task:
+    db_task = Task(project_id=project_id, **task.model_dump())
     db.add(db_task)
     db.commit()
     db.refresh(db_task)
