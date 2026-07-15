@@ -1,30 +1,34 @@
+from sqlalchemy.orm import Session
+
+from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
-ProjectRecord = dict[str, object]
+def get_project(db: Session, project_id: int) -> Project | None:
+    return db.query(Project).filter(Project.id == project_id).first()
 
 
-def get_project(projects: list[ProjectRecord], project_id: int) -> ProjectRecord | None:
-    return next((project for project in projects if project["id"] == project_id), None)
+def get_projects(db: Session, skip: int = 0, limit: int = 100) -> list[Project]:
+    return db.query(Project).offset(skip).limit(limit).all()
 
 
-def get_projects(projects: list[ProjectRecord], skip: int = 0, limit: int = 100) -> list[ProjectRecord]:
-    return projects[skip : skip + limit]
-
-
-def create_project(projects: list[ProjectRecord], project: ProjectCreate) -> ProjectRecord:
-    next_id = max((int(item["id"]) for item in projects), default=0) + 1
-    new_project = {"id": next_id, **project.model_dump()}
-    projects.append(new_project)
-    return new_project
-
-
-def update_project(db_project: ProjectRecord, project: ProjectUpdate) -> ProjectRecord:
-    for field, value in project.model_dump(exclude_unset=True).items():
-        db_project[field] = value
-
+def create_project(db: Session, project: ProjectCreate) -> Project:
+    db_project = Project(**project.model_dump())
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
     return db_project
 
 
-def delete_project(projects: list[ProjectRecord], db_project: ProjectRecord) -> None:
-    projects.remove(db_project)
+def update_project(db: Session, db_project: Project, project: ProjectUpdate) -> Project:
+    for field, value in project.model_dump(exclude_unset=True).items():
+        setattr(db_project, field, value)
+
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+
+def delete_project(db: Session, db_project: Project) -> None:
+    db.delete(db_project)
+    db.commit()
