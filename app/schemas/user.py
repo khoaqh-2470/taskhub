@@ -1,6 +1,9 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.project import ProjectWithTasksResponse
+from app.schemas.task import TaskWithTagsResponse
 
 
 class UserBase(BaseModel):
@@ -23,3 +26,8 @@ class UserResponse(UserBase):
 
     id: int
     created_at: datetime
+
+
+class UserProfileResponse(UserResponse):
+    projects: list[ProjectWithTasksResponse] = Field(default_factory=list)
+    assigned_tasks: list[TaskWithTagsResponse] = Field(default_factory=list)

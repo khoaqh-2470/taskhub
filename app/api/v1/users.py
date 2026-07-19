@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.crud import user as user_crud
-from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.schemas.user import UserCreate, UserProfileResponse, UserResponse, UserUpdate
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -17,6 +17,14 @@ def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 @router.get("/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(get_db)):
     db_user = user_crud.get_user(db, user_id)
+    if db_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return db_user
+
+
+@router.get("/{username}/profile", response_model=UserProfileResponse)
+def read_user_profile(username: str, db: Session = Depends(get_db)):
+    db_user = user_crud.get_user_profile(db, username)
     if db_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return db_user

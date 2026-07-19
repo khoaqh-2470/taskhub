@@ -1,6 +1,8 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.tag import TagResponse
 
 
 class TaskBase(BaseModel):
@@ -13,6 +15,10 @@ class TaskBase(BaseModel):
 
 class TaskCreate(TaskBase):
     project_id: int
+    assignee_id: int | None = None
+
+
+class TaskCreateInProject(TaskBase):
     assignee_id: int | None = None
 
 
@@ -33,3 +39,7 @@ class TaskResponse(TaskBase):
     project_id: int
     assignee_id: int | None = None
     created_at: datetime
+
+
+class TaskWithTagsResponse(TaskResponse):
+    tags: list[TagResponse] = Field(default_factory=list)
