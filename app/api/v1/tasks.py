@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import can_manage_project, get_current_user, get_task_for_project_owner_or_admin
 from app.core.database import get_db
 from app.crud import project as project_crud
 from app.crud import task as task_crud
 from app.crud import user as user_crud
+from app.models.task import Task
+from app.models.user import User
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
 
 
@@ -25,9 +28,17 @@ def read_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task(task: TaskCreate, db: Session = Depends(get_db)):
-    if project_crud.get_project(db, task.project_id) is None:
+def create_task(
+    task: TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    db_project = project_crud.get_project(db, task.project_id)
+    if db_project is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project not found")
+
+    if not can_manage_project(current_user, db_project):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
 
     if task.assignee_id is not None and user_crud.get_user(db, task.assignee_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignee not found")
@@ -36,13 +47,18 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
-def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
-    db_task = task_crud.get_task(db, task_id)
-    if db_task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-
-    if task.project_id is not None and project_crud.get_project(db, task.project_id) is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project not found")
+def update_task(
+    task: TaskUpdate,
+    db_task: Task = Depends(get_task_for_project_owner_or_admin),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if task.project_id is not None:
+        db_project = project_crud.get_project(db, task.project_id)
+        if db_project is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project not found")
+        if not can_manage_project(current_user, db_project):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
 
     if task.assignee_id is not None and user_crud.get_user(db, task.assignee_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignee not found")
@@ -51,9 +67,9 @@ def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: int, db: Session = Depends(get_db)):
-    db_task = task_crud.get_task(db, task_id)
-    if db_task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+def delete_task(
+    db_task: Task = Depends(get_task_for_project_owner_or_admin),
+    db: Session = Depends(get_db),
+):
     task_crud.delete_task(db, db_task)
     return None
