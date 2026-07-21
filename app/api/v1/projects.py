@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import ADMIN_ROLE, get_current_user, get_project_for_owner_or_admin
 from app.core.database import get_db
 from app.crud import project as project_crud
 from app.crud import task as task_crud
 from app.crud import user as user_crud
+from app.models.project import Project
+from app.models.user import User
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.schemas.task import TaskCreateInProject, TaskWithTagsResponse
 
@@ -39,21 +42,25 @@ def read_project_tasks(project_id: int, db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
 )
 def create_project_task(
-    project_id: int,
     task: TaskCreateInProject,
+    db_project: Project = Depends(get_project_for_owner_or_admin),
     db: Session = Depends(get_db),
 ):
-    if project_crud.get_project(db, project_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
     if task.assignee_id is not None and user_crud.get_user(db, task.assignee_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignee not found")
 
-    return task_crud.create_task_in_project(db, project_id, task)
+    return task_crud.create_task_in_project(db, db_project.id, task)
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
+def create_project(
+    project: ProjectCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != ADMIN_ROLE and project.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+
     owner = user_crud.get_user(db, project.owner_id)
     if owner is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner not found")
@@ -61,11 +68,18 @@ def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
-def update_project(project_id: int, project: ProjectUpdate, db: Session = Depends(get_db)):
-    db_project = project_crud.get_project(db, project_id)
-    if db_project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
+def update_project(
+    project: ProjectUpdate,
+    db_project: Project = Depends(get_project_for_owner_or_admin),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if (
+        project.owner_id is not None
+        and project.owner_id != db_project.owner_id
+        and current_user.role != ADMIN_ROLE
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
     if project.owner_id is not None and user_crud.get_user(db, project.owner_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner not found")
 
@@ -73,9 +87,9 @@ def update_project(project_id: int, project: ProjectUpdate, db: Session = Depend
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: int, db: Session = Depends(get_db)):
-    db_project = project_crud.get_project(db, project_id)
-    if db_project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+def delete_project(
+    db_project: Project = Depends(get_project_for_owner_or_admin),
+    db: Session = Depends(get_db),
+):
     project_crud.delete_project(db, db_project)
     return None
