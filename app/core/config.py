@@ -20,6 +20,11 @@ class Settings(BaseSettings):
         30,
         validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
+    redis_url: str = Field("redis://localhost:6379/0", validation_alias="REDIS_URL")
+    project_tasks_cache_ttl_seconds: int = Field(
+        60,
+        validation_alias="PROJECT_TASKS_CACHE_TTL_SECONDS",
+    )
 
 
 settings = Settings()

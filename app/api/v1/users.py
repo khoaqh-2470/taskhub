@@ -24,7 +24,12 @@ def read_users(
     return user_crud.get_users(db, skip=skip, limit=limit)
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user",
+)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     existing_email = user_crud.get_user_by_email(db, user.email)
     if existing_email is not None:
@@ -37,7 +42,12 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     return user_crud.create_user(db, user)
 
 
-@router.post("/login", response_model=Token)
+@router.post(
+    "/login",
+    response_model=Token,
+    summary="Login and get an access token",
+    description="Uses OAuth2 password flow. Submit username and password as form data.",
+)
 def login_user(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
@@ -54,12 +64,20 @@ def login_user(
     return Token(access_token=access_token)
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Get current user",
+)
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.put("/me", response_model=UserResponse)
+@router.put(
+    "/me",
+    response_model=UserResponse,
+    summary="Update current user",
+)
 def update_current_user(
     user: UserUpdate,
     current_user: User = Depends(get_current_user),
