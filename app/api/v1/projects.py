@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import ADMIN_ROLE, get_current_user, get_project_for_owner_or_admin
+from app.core.cache import delete_cache_key, get_or_set_json_cache, project_tasks_cache_key
+from app.core.config import settings
 from app.core.database import get_db
 from app.crud import project as project_crud
 from app.crud import task as task_crud
@@ -15,12 +17,20 @@ from app.schemas.task import TaskCreateInProject, TaskWithTagsResponse
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-@router.get("/", response_model=list[ProjectResponse])
+@router.get(
+    "/",
+    response_model=list[ProjectResponse],
+    summary="List projects",
+)
 def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return project_crud.get_projects(db, skip=skip, limit=limit)
 
 
-@router.get("/{project_id}", response_model=ProjectResponse)
+@router.get(
+    "/{project_id}",
+    response_model=ProjectResponse,
+    summary="Get project detail",
+)
 def read_project(project_id: int, db: Session = Depends(get_db)):
     db_project = project_crud.get_project(db, project_id)
     if db_project is None:
@@ -28,12 +38,24 @@ def read_project(project_id: int, db: Session = Depends(get_db)):
     return db_project
 
 
-@router.get("/{project_id}/tasks", response_model=list[TaskWithTagsResponse])
+@router.get(
+    "/{project_id}/tasks",
+    response_model=list[TaskWithTagsResponse],
+    summary="List tasks in a project",
+    description="Returns tasks for a project and caches the response in Redis.",
+)
 def read_project_tasks(project_id: int, db: Session = Depends(get_db)):
-    db_project = project_crud.get_project_with_tasks(db, project_id)
-    if db_project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    return db_project.tasks
+    def load_project_tasks():
+        db_project = project_crud.get_project_with_tasks(db, project_id)
+        if db_project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        return db_project.tasks
+
+    return get_or_set_json_cache(
+        project_tasks_cache_key(project_id),
+        settings.project_tasks_cache_ttl_seconds,
+        load_project_tasks,
+    )
 
 
 @router.post(
@@ -49,7 +71,9 @@ def create_project_task(
     if task.assignee_id is not None and user_crud.get_user(db, task.assignee_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignee not found")
 
-    return task_crud.create_task_in_project(db, db_project.id, task)
+    db_task = task_crud.create_task_in_project(db, db_project.id, task)
+    delete_cache_key(project_tasks_cache_key(db_project.id))
+    return db_task
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -91,5 +115,6 @@ def delete_project(
     db_project: Project = Depends(get_project_for_owner_or_admin),
     db: Session = Depends(get_db),
 ):
+    delete_cache_key(project_tasks_cache_key(db_project.id))
     project_crud.delete_project(db, db_project)
     return None
